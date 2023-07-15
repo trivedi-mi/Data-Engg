@@ -6,6 +6,8 @@ import configparser
 import argparse
 import sys
 from datetime import datetime
+import requests
+import subprocess
 
 class ETL_Process():
     """Class for performing ETL Process"""
@@ -40,10 +42,12 @@ class ETL_Process():
         # Check if action is encoding or decoding
         if action == "encode":
             # Encode string to ASCII value
-            ascii_string = string_parameter.encode('ascii')
+            bytes_to_encode = string_parameter.encode("utf-8")
+            # Encode the bytes to base64
+            encoded_bytes = base64.b64encode(bytes_to_encode)
 
-            # Encode ASCII string to base64
-            encoded_string = base64.b64encode(ascii_string).decode('utf-8')
+# Convert the encoded bytes to a string
+            encoded_string = encoded_bytes.decode("utf-8")
 
             # Return the encoded string
             return encoded_string
@@ -57,18 +61,26 @@ class ETL_Process():
             return decoded_string
 
     def get_messages(self):
+        command = f"awslocal sqs receive-message --queue-url {self.__endpoint_url}/{self.__queue_name}"
+
+    # Execute the command
+   
+        output = subprocess.check_output(command, shell=True)
+        response = json.loads(output)
         """Function to receive messages from SQS Queue"""
 
         # Instantiate SQS Client
-        sqs_client = boto3.client("sqs", endpoint_url = self.__endpoint_url)
+        #sqs_client = boto3.client("sqs", endpoint_url = self.__endpoint_url)
 
         # Receive messages from queue
         try:
-            response = sqs_client.receive_message(
-                QueueUrl= self.__endpoint_url + '/' + self.__queue_name,
-                MaxNumberOfMessages=self.__max_messages,
-                WaitTimeSeconds=self.__wait_time
-            )
+            # response = sqs_client.receive_message(
+            #     QueueUrl= self.__endpoint_url + '/' + self.__queue_name,
+            #     MaxNumberOfMessages=self.__max_messages,
+            #     WaitTimeSeconds=self.__wait_time
+            
+            print(response)
+            
         except Exception as exceptions:
             # Print error while parsing parameters
             print("Error - " + str(exceptions))
@@ -136,6 +148,7 @@ class ETL_Process():
 
         # Return the message list
         return message_list
+    
 
     def load_data_postgre(self, message_list):
         """Function to load data to postgres"""
@@ -153,15 +166,28 @@ class ETL_Process():
             sys.exit()
 
         # Connect to Postgres
-        postgres_conn = psycopg2.connect(
-            host = self.base64_encode(self.__host, action="decode"),
-            database = self.base64_encode(self.__database, action="decode"),
-            user = self.base64_encode(self.__username, action="decode"),
-            password = self.base64_encode(self.__password, action="decode")
-        )
+        postgres_conn =  psycopg2.connect(
+                        host="localhost",
+                        port="5432",
+                        database="postgres",
+                        user="postgres",
+                        password="postgres"
+                        )
 
         # Create a Cursor
         cursor = postgres_conn.cursor()
+        def get_first(number):
+            dot_index = number.find(".")
+
+# Extract the substring before the dot
+            first_number_str = number[:dot_index]
+
+# Convert the extracted substring to an integer
+            first_number_int = int(first_number_str)
+
+            return first_number_int
+
+        
 
         # Iterate through messages
         for message_json in message_list:
@@ -169,9 +195,13 @@ class ETL_Process():
             message_json['locale'] = 'None' if message_json['locale'] == None else message_json['locale']
             # Set 'create_date' field as current date
             message_json['create_date'] = datetime.now().strftime("%Y-%m-%d")
+            app_v=message_json['app_version']
+            message_json['app_version']=get_first(app_v)
+           
 
             # Convert dictionary values to list
             values = list(message_json.values())
+            print(values)
 
             # Execute the insert query
             cursor.execute("INSERT INTO user_logins ( \
@@ -227,6 +257,7 @@ def main():
     # Extract messages from SQS Queue
     print("Fetching messages from SQS Queue...")
     messages = etl_process_object.get_messages()
+    print(messages)
 
     # Transform IIPs from the messages
     print("Masking PIIs from the messages...")
