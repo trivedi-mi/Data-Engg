@@ -1,12 +1,12 @@
-ifeq (, $(shell which python))
+ifeq (, $(shell where python))
 	$(error "python was not found in $(PATH). For installation instructions go to https://www.python.org/downloads/.")
 endif
 
-ifeq (, $(shell which docker))
+ifeq (, $(shell where docker))
 	$(error "docker was not found in $(PATH). For installation instructions go to https://docs.docker.com/get-docker/.")
 endif
 
-ifeq (, $(shell which docker-compose))
+ifeq (, $(shell where docker-compose))
 	$(error "docker-compose was not found in $(PATH). For installation instructions go to https://docs.docker.com/compose/install/.")
 endif
 
